@@ -137,6 +137,7 @@ std::shared_ptr<IGraph> DriverCompilerAdapter::compile(const std::shared_ptr<con
     OV_ITT_TASK_NEXT(COMPILE_BLOB, "getNetworkMeta");
     auto networkMeta = _zeGraphExt->getNetworkMeta(graphDesc);
     networkMeta.name = model->get_friendly_name();
+    networkMeta.mark_host_only_inputs(model);
 
     return std::make_shared<Graph>(_zeGraphExt,
                                    _zeroInitStruct,
@@ -239,6 +240,7 @@ std::shared_ptr<IGraph> DriverCompilerAdapter::compileWS(std::shared_ptr<ov::Mod
             initGraphDescriptors.push_back(graphDesc);
         } else {
             networkMetadata.name = model->get_friendly_name() + "_main";
+            networkMetadata.mark_host_only_inputs(model);
             mainNetworkMetadata = std::move(networkMetadata);
             mainGraphHandle = graphDesc;
             serializedIR = SerializedIR();

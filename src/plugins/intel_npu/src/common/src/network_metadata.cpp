@@ -4,6 +4,8 @@
 
 #include "intel_npu/common/network_metadata.hpp"
 
+#include <unordered_set>
+
 #include "openvino/core/except.hpp"
 
 namespace intel_npu {
@@ -76,3 +78,44 @@ void NetworkMetadata::bindRelatedDescriptors() {
 }
 
 }  // namespace intel_npu
+
+void intel_npu::NetworkMetadata::mark_host_only_inputs(const std::shared_ptr<const ov::Model>& model) {
+    std::unordered_set<const ov::Node*> reachable;
+    std::vector<std::shared_ptr<ov::Node>> pending;
+    for (const auto& result : model->get_results()) {
+        pending.push_back(result);
+    }
+    for (const auto& sink : model->get_sinks()) {
+        pending.push_back(sink);
+    }
+    while (!pending.empty()) {
+        const auto node = pending.back();
+        pending.pop_back();
+        if (!reachable.insert(node.get()).second) {
+            continue;
+        }
+        for (const auto& input : node->input_values()) {
+            pending.push_back(input.get_node_shared_ptr());
+        }
+        for (const auto& dependency : node->get_control_dependencies()) {
+            pending.push_back(dependency);
+        }
+    }
+    for (auto& desc : inputs) {
+        if (desc.isStateInput || desc.isShapeTensor || desc.isMainInputWeights || desc.isInitInputWeights) {
+            continue;
+        }
+        // Compiler-generated inputs remain device-accessed. Match a unique original parameter.
+        const ov::Node* matched = nullptr;
+        bool ambiguous = false;
+        for (const auto& parameter : model->get_parameters()) {
+            if (desc.nodeFriendlyName == parameter->get_friendly_name() ||
+                desc.nameFromCompiler == parameter->get_friendly_name() ||
+                parameter->output(0).get_names().count(desc.nameFromCompiler)) {
+                ambiguous = ambiguous || matched != nullptr;
+                matched = parameter.get();
+            }
+        }
+        desc.isHostOnly = matched != nullptr && !ambiguous && !reachable.count(matched);
+    }
+}

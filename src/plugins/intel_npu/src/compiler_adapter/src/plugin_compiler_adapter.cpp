@@ -81,6 +81,7 @@ std::shared_ptr<IGraph> PluginCompilerAdapter::compile(const std::shared_ptr<con
             graphDesc = _zeGraphExt->getGraphDescriptor(tensor.data(), tensor.get_byte_size());
             networkMeta = _zeGraphExt->getNetworkMeta(graphDesc);
             networkMeta.name = model->get_friendly_name();
+            networkMeta.mark_host_only_inputs(model);
         } catch (const std::exception& ex) {
             _logger.info("Failed to use the level zero graph handle: %s. Inference requests for this model are not "
                          "allowed. Only exports are available",
@@ -221,6 +222,7 @@ std::shared_ptr<IGraph> PluginCompilerAdapter::compileWS(std::shared_ptr<ov::Mod
             }
 
             networkMetadata.name = model->get_friendly_name() + "_main";
+            networkMetadata.mark_host_only_inputs(model);
             tensorMain = std::move(tensor);
             mainGraphDesc = graphDesc;
             mainNetworkMetadata = std::move(networkMetadata);

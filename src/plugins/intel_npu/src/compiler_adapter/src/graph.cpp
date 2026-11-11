@@ -168,6 +168,22 @@ std::vector<ov::ProfilingInfo> Graph::process_profiling_output(const std::vector
     return compiler->process_profiling_output(profData, blob);
 }
 
+void Graph::set_host_only_arguments(const std::vector<uint32_t>& indices) {
+    for (const auto index : indices) {
+        const auto input =
+            std::find_if(_metadata.inputs.begin(), _metadata.inputs.end(), [index](const IODescriptor& d) {
+                return d.indexUsedByDriver == index;
+            });
+        OPENVINO_ASSERT(input != _metadata.inputs.end(), "Cached host-only argument is not a graph input");
+        OPENVINO_ASSERT(
+            !input->isStateInput && !input->isShapeTensor && !input->isMainInputWeights && !input->isInitInputWeights,
+            "Cached host-only declaration targets a compiler-generated argument");
+    }
+    for (auto& input : _metadata.inputs) {
+        input.isHostOnly = std::find(indices.begin(), indices.end(), input.indexUsedByDriver) != indices.end();
+    }
+}
+
 void Graph::set_argument_value(uint32_t id, const void* data, size_t size) const {
     if (_zeGraphExt == nullptr) {
         OPENVINO_THROW("Zero compiler adapter wasn't initialized");

@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include "intel_npu/config/config.hpp"
+#include "openvino/core/model.hpp"
 #include "openvino/core/partial_shape.hpp"
 #include "openvino/core/type/element_type.hpp"
 #include "openvino/runtime/common.hpp"
@@ -135,10 +136,16 @@ struct IODescriptor {
      * transposed data without copying.
      */
     bool supportsStridedLayout = false;
+
+    // Retained NPUW closure inputs may be used only by a CPU gather. They stay available to
+    // get_tensor(), but do not require device residency for this compiled subgraph.
+    bool isHostOnly = false;
 };
 
 struct NetworkMetadata final {
     std::string name;
+
+    void mark_host_only_inputs(const std::shared_ptr<const ov::Model>& model);
 
     std::vector<IODescriptor> inputs;
     std::vector<IODescriptor> outputs;
