@@ -77,11 +77,15 @@ public:
                         const uint8_t*& blobPtr,
                         size_t& blobSize) const;
 
-    void setGraphArgumentValue(const GraphDescriptor& graphDescriptor, uint32_t id, const void* data) const;
+    void setGraphArgumentValue(const GraphDescriptor& graphDescriptor,
+                               uint32_t id,
+                               const void* data,
+                               size_t size) const;
 
     void setGraphArgumentValueWithStrides(const GraphDescriptor& graphDescriptor,
                                           uint32_t id,
                                           const void* data,
+                                          size_t size,
                                           const std::vector<size_t>& strides) const;
 
     void initializeGraph(const GraphDescriptor& graphDescriptor) const;

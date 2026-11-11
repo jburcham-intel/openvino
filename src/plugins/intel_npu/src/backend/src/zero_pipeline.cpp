@@ -8,6 +8,7 @@
 #include <ze_graph_ext.h>
 
 #include <algorithm>
+#include <limits>
 
 #include "intel_npu/common/itt.hpp"
 #include "intel_npu/config/options.hpp"
@@ -25,6 +26,33 @@ uint32_t get_graph_unique_id_or_throw(const std::shared_ptr<intel_npu::IGraph>& 
 }  // namespace
 
 namespace intel_npu {
+
+namespace {
+// bytes the device accesses from the bound address of one command list's share of tensor; 0 when the driver takes no
+// argument size (graph extension before 1.21), which then ignores it, so nothing here can fail on those drivers
+size_t device_access_size(const ZeroInitStructsHolder& init_structs, const ov::ITensor& tensor, size_t batches = 1) {
+    const auto& shape = tensor.get_shape();
+    if (!init_structs.isGraphArgumentSizeSupported() || tensor.get_byte_size() == 0) {
+        return 0;
+    }
+    if (tensor.get_element_type().bitwidth() < 8 || tensor.is_continuous() || tensor.get_strides().empty()) {
+        OPENVINO_ASSERT(tensor.get_byte_size() % batches == 0, "Tensor cannot be split evenly across command lists");
+        return tensor.get_byte_size() / batches;
+    }
+    const auto& strides = tensor.get_strides();
+    OPENVINO_ASSERT(shape.size() == strides.size(), "Tensor stride dimensionality mismatch");
+    size_t span = tensor.get_element_type().size();
+    for (size_t dim = 0; dim < shape.size(); ++dim) {
+        const size_t count = dim == 0 ? shape[dim] / batches : shape[dim];
+        OPENVINO_ASSERT(count > 0 && (dim != 0 || shape[dim] % batches == 0), "Invalid batch slice");
+        OPENVINO_ASSERT(strides[dim] > 0, "Zero tensor stride is unsupported");
+        OPENVINO_ASSERT(count - 1 <= (std::numeric_limits<size_t>::max() - span) / strides[dim],
+                        "Tensor span overflow");
+        span += (count - 1) * strides[dim];
+    }
+    return span;
+}
+}  // namespace
 
 std::vector<size_t> IPipeline::get_strides(const std::vector<size_t>& strides_in_bytes,
                                            size_t element_size,
@@ -211,11 +239,14 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
 
                 if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() ||
                     tensor->get_strides().empty()) {
-                    _graph->set_argument_value(desc.indexUsedByDriver, tensor->data());
+                    _graph->set_argument_value(desc.indexUsedByDriver,
+                                               tensor->data(),
+                                               device_access_size(*_init_structs, *tensor));
                 } else {
                     _graph->set_argument_value_with_strides(
                         desc.indexUsedByDriver,
                         tensor->data(),
+                        device_access_size(*_init_structs, *tensor),
                         get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
                 }
                 ++io_index;
@@ -226,11 +257,13 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
             if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() || tensor->get_strides().empty()) {
                 _graph->set_argument_value(
                     desc.indexUsedByDriver,
-                    static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size);
+                    static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size,
+                    device_access_size(*_init_structs, *tensor, _batch_size));
             } else {
                 _graph->set_argument_value_with_strides(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
+                    device_access_size(*_init_structs, *tensor, _batch_size),
                     get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
             }
 
@@ -243,11 +276,13 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
             if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() || tensor->get_strides().empty()) {
                 _graph->set_argument_value(
                     desc.indexUsedByDriver,
-                    static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size);
+                    static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size,
+                    device_access_size(*_init_structs, *tensor, _batch_size));
             } else {
                 _graph->set_argument_value_with_strides(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
+                    device_access_size(*_init_structs, *tensor, _batch_size),
                     get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
             }
             ++io_index;
@@ -387,13 +422,16 @@ void Pipeline::update_graph_arguments(uint32_t index,
 
     for (size_t i = 0; i < number_of_command_lists; i++) {
         if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() || tensor->get_strides().empty()) {
-            _command_lists.at(i)->updateMutableCommandList(index,
-                                                           static_cast<const unsigned char*>(tensor->data()) +
-                                                               (i * tensor->get_byte_size()) / number_of_command_lists);
+            _command_lists.at(i)->updateMutableCommandList(
+                index,
+                static_cast<const unsigned char*>(tensor->data()) +
+                    (i * tensor->get_byte_size()) / number_of_command_lists,
+                device_access_size(*_init_structs, *tensor, number_of_command_lists));
         } else {
             _command_lists.at(i)->updateMutableCommandListWithStrides(
                 index,
                 static_cast<const unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
+                device_access_size(*_init_structs, *tensor, number_of_command_lists),
                 get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
         }
     }
@@ -413,12 +451,14 @@ void Pipeline::update_graph_arguments(uint32_t index,
                     batch_index);
 
     if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() || tensor->get_strides().empty()) {
-        _command_lists.at(batch_index)->updateMutableCommandList(index, tensor->data());
+        _command_lists.at(batch_index)
+            ->updateMutableCommandList(index, tensor->data(), device_access_size(*_init_structs, *tensor));
     } else {
         _command_lists.at(batch_index)
             ->updateMutableCommandListWithStrides(
                 index,
                 tensor->data(),
+                device_access_size(*_init_structs, *tensor),
                 get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
     }
 };

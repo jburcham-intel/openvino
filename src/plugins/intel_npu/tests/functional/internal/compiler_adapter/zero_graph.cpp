@@ -173,7 +173,7 @@ TEST_P(ZeroGraphCompilationTests, GetInitSetArgsDestroyGraphAlignedMemoryIR) {
     OV_ASSERT_NO_THROW(
         buffer = ::intel_npu::zero_mem::allocate_memory(zeroInitStruct, totalSize, ::utils::STANDARD_PAGE_SIZE, false));
 
-    OV_ASSERT_NO_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, buffer->data()));
+    OV_ASSERT_NO_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, buffer->data(), totalSize));
 }
 
 TEST_P(ZeroGraphTest, GetGraphInitBlob) {
@@ -214,7 +214,7 @@ TEST_P(ZeroGraphTest, SetGraphArgOnNullBuffer) {
     OV_ASSERT_NO_THROW(graphDescriptor = zeGraphExt->getGraphDescriptor(serializedIR, "", bypassUmdCache()));
     OV_ASSERT_NO_THROW(zeGraphExt->initializeGraph(graphDescriptor));
 
-    ASSERT_ANY_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, nullptr));
+    ASSERT_ANY_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, nullptr, 0));
 }
 
 TEST_P(ZeroGraphTest, GetInitSetArgsDestroyGraphAlignedMemoryMallocBlob) {
@@ -229,7 +229,7 @@ TEST_P(ZeroGraphTest, GetInitSetArgsDestroyGraphAlignedMemoryMallocBlob) {
         buffer =
             ::intel_npu::zero_mem::allocate_memory(zeroInitStruct, alignedSize, ::utils::STANDARD_PAGE_SIZE, false));
 
-    OV_ASSERT_NO_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, buffer->data()));
+    OV_ASSERT_NO_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, buffer->data(), alignedSize));
 }
 
 TEST_P(ZeroGraphTest, GetInitSetArgsDestroyGraphNotAlignedMemoryMallocBlob) {
@@ -244,7 +244,8 @@ TEST_P(ZeroGraphTest, GetInitSetArgsDestroyGraphNotAlignedMemoryMallocBlob) {
         buffer =
             ::intel_npu::zero_mem::allocate_memory(zeroInitStruct, alignedSize, ::utils::STANDARD_PAGE_SIZE, false));
 
-    OV_ASSERT_NO_THROW(zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, static_cast<char*>(buffer->data()) + 1));
+    OV_ASSERT_NO_THROW(
+        zeGraphExt->setGraphArgumentValue(graphDescriptor, 0, static_cast<char*>(buffer->data()) + 1, alignedSize - 1));
 }
 
 TEST_P(ZeroGraphTest, SetUnalignedAddressBlob) {

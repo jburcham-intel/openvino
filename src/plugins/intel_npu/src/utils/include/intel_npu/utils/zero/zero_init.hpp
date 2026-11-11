@@ -81,6 +81,11 @@ public:
     inline bool isCommandQueueSetPrioritySupported() const {
         return _command_queue_set_priority_supported;
     }
+
+    // whether graph arguments can carry ze_graph_argument_size_desc_t (graph extension 1.21)
+    inline bool isGraphArgumentSizeSupported() const {
+        return getGraphDdiTable().version() >= ZE_MAKE_VERSION(1, 21);
+    }
     inline uint32_t getCommandQueueGroupOrdinal() const {
         return _command_queue_group_ordinal;
     }

@@ -168,18 +168,21 @@ std::vector<ov::ProfilingInfo> Graph::process_profiling_output(const std::vector
     return compiler->process_profiling_output(profData, blob);
 }
 
-void Graph::set_argument_value(uint32_t id, const void* data) const {
+void Graph::set_argument_value(uint32_t id, const void* data, size_t size) const {
     if (_zeGraphExt == nullptr) {
         OPENVINO_THROW("Zero compiler adapter wasn't initialized");
     }
-    _zeGraphExt->setGraphArgumentValue(_graphDesc, id, data);
+    _zeGraphExt->setGraphArgumentValue(_graphDesc, id, data, size);
 }
 
-void Graph::set_argument_value_with_strides(uint32_t id, const void* data, const std::vector<size_t>& strides) const {
+void Graph::set_argument_value_with_strides(uint32_t id,
+                                            const void* data,
+                                            size_t size,
+                                            const std::vector<size_t>& strides) const {
     if (_zeGraphExt == nullptr) {
         OPENVINO_THROW("Zero compiler adapter wasn't initialized");
     }
-    _zeGraphExt->setGraphArgumentValueWithStrides(_graphDesc, id, data, strides);
+    _zeGraphExt->setGraphArgumentValueWithStrides(_graphDesc, id, data, size, strides);
 }
 
 void Graph::initialize_impl(const Config& config) {
