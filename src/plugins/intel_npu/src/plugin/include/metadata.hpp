@@ -79,6 +79,7 @@ public:
     virtual std::optional<std::string_view> get_compatibility_descriptor() const;
 
     virtual std::optional<BlobType> get_blob_type() const;
+    virtual std::optional<std::vector<uint32_t>> get_host_only_arguments() const;
 
     virtual ~MetadataBase() = default;
 
@@ -166,7 +167,8 @@ constexpr uint32_t METADATA_VERSION_2_7{MetadataBase::make_version(2, 7)};
 /**
  * @brief Current metadata version.
  */
-constexpr uint32_t CURRENT_METADATA_VERSION{METADATA_VERSION_2_7};
+constexpr uint32_t METADATA_VERSION_2_8{MetadataBase::make_version(2, 8)};
+constexpr uint32_t CURRENT_METADATA_VERSION{METADATA_VERSION_2_8};
 
 constexpr uint16_t CURRENT_METADATA_MAJOR_VERSION{MetadataBase::get_major(CURRENT_METADATA_VERSION)};
 constexpr uint16_t CURRENT_METADATA_MINOR_VERSION{MetadataBase::get_minor(CURRENT_METADATA_VERSION)};
@@ -454,6 +456,33 @@ protected:
 
 private:
     BlobType _blobType;
+};
+
+// Device-access declarations must survive model cache export/import.
+template <>
+class Metadata<METADATA_VERSION_2_8> : public Metadata<METADATA_VERSION_2_7> {
+public:
+    Metadata(uint64_t blobSize,
+             const std::optional<OpenvinoVersion>& ovVersion = std::nullopt,
+             const std::optional<std::vector<uint64_t>>& initSizes = std::nullopt,
+             const std::optional<int64_t> batchSize = std::nullopt,
+             const std::optional<std::vector<ov::Layout>>& inputLayouts = std::nullopt,
+             const std::optional<std::vector<ov::Layout>>& outputLayouts = std::nullopt,
+             const std::optional<uint32_t> compilerVersion = std::nullopt,
+             const std::optional<uint64_t>& blobSizeAfterEncryption = std::nullopt,
+             const std::optional<std::string_view> compatibilityDescriptor = std::nullopt,
+             BlobType blobType = BlobType::ELF,
+             const std::vector<uint32_t>& hostOnlyArguments = {});
+
+    std::optional<std::vector<uint32_t>> get_host_only_arguments() const override;
+
+protected:
+    void read_unchecked(BlobSource& source) override;
+
+    void write_without_footer(std::ostream& stream) override;
+
+private:
+    std::vector<uint32_t> _hostOnlyArguments;
 };
 
 /**

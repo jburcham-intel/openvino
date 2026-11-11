@@ -233,6 +233,31 @@ Metadata<METADATA_VERSION_2_7>::Metadata(uint64_t blobSize,
     _version = METADATA_VERSION_2_7;
 }
 
+Metadata<METADATA_VERSION_2_8>::Metadata(uint64_t blobSize,
+                                         const std::optional<OpenvinoVersion>& ovVersion,
+                                         const std::optional<std::vector<uint64_t>>& initSizes,
+                                         const std::optional<int64_t> batchSize,
+                                         const std::optional<std::vector<ov::Layout>>& inputLayouts,
+                                         const std::optional<std::vector<ov::Layout>>& outputLayouts,
+                                         const std::optional<uint32_t> compilerVersion,
+                                         const std::optional<uint64_t>& blobSizeAfterEncryption,
+                                         const std::optional<std::string_view> compatibilityDescriptor,
+                                         BlobType blobType,
+                                         const std::vector<uint32_t>& hostOnlyArguments)
+    : Metadata<METADATA_VERSION_2_7>{blobSize,
+                                     ovVersion,
+                                     initSizes,
+                                     batchSize,
+                                     inputLayouts,
+                                     outputLayouts,
+                                     compilerVersion,
+                                     blobSizeAfterEncryption,
+                                     compatibilityDescriptor,
+                                     blobType},
+      _hostOnlyArguments{hostOnlyArguments} {
+    _version = METADATA_VERSION_2_8;
+}
+
 void MetadataBase::read(BlobSource& source) {
     read_unchecked(source);
     get_and_check_remaining_source_size(source);
@@ -572,6 +597,8 @@ std::unique_ptr<MetadataBase> create_metadata(uint32_t version, uint64_t blobSiz
     case METADATA_VERSION_2_6:
         logger.debug("Creating a metadata object of version 2.6");
         return std::make_unique<Metadata<METADATA_VERSION_2_6>>(blobSize);
+    case METADATA_VERSION_2_8:
+        return std::make_unique<Metadata<METADATA_VERSION_2_8>>(blobSize);
     case METADATA_VERSION_2_7:
         logger.debug("Creating a metadata object of version 2.7");
         return std::make_unique<Metadata<METADATA_VERSION_2_7>>(blobSize);
@@ -720,6 +747,35 @@ std::optional<bool> Metadata<METADATA_VERSION_2_5>::is_encrypted_blob() const {
 
 std::optional<std::string_view> Metadata<METADATA_VERSION_2_6>::get_compatibility_descriptor() const {
     return _compatibilityDescriptor;
+}
+
+std::optional<std::vector<uint32_t>> MetadataBase::get_host_only_arguments() const {
+    return std::nullopt;
+}
+
+std::optional<std::vector<uint32_t>> Metadata<METADATA_VERSION_2_8>::get_host_only_arguments() const {
+    return _hostOnlyArguments;
+}
+
+void Metadata<METADATA_VERSION_2_8>::write_without_footer(std::ostream& stream) {
+    Metadata<METADATA_VERSION_2_7>::write_without_footer(stream);
+    const uint64_t count = _hostOnlyArguments.size();
+    stream.write(reinterpret_cast<const char*>(&count), sizeof(count));
+    for (const auto index : _hostOnlyArguments) {
+        stream.write(reinterpret_cast<const char*>(&index), sizeof(index));
+    }
+}
+
+void Metadata<METADATA_VERSION_2_8>::read_unchecked(BlobSource& source) {
+    Metadata<METADATA_VERSION_2_7>::read_unchecked(source);
+    uint64_t count = 0;
+    source.read_into_buffer(&count, sizeof(count));
+    OPENVINO_ASSERT(count <= (get_and_check_remaining_source_size(source) - FOOTER_SIZE) / sizeof(uint32_t),
+                    "Invalid host-only argument count in cache metadata");
+    _hostOnlyArguments.resize(static_cast<size_t>(count));
+    for (auto& index : _hostOnlyArguments) {
+        source.read_into_buffer(&index, sizeof(index));
+    }
 }
 
 }  // namespace intel_npu

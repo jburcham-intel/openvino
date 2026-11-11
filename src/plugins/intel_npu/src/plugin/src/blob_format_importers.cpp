@@ -373,6 +373,10 @@ private:
                    : std::nullopt;
     }
 
+    std::optional<std::vector<uint32_t>> extract_host_only_arguments() const override {
+        return m_metadata->get_host_only_arguments();
+    }
+
     std::optional<BlobType> extract_blob_type() const override {
         return m_metadata->get_blob_type();
     }
@@ -454,6 +458,10 @@ std::shared_ptr<IGraph> IBlobFormatImporter::create_graph(const ov::SoPtr<IEngin
                             extract_compiler_compatibility_descriptor(),
                             extract_blob_type());
 
+    // blobs exported before metadata 2.8 carry no declaration; every argument then stays device-accessed
+    if (const auto hostOnlyArguments = extract_host_only_arguments()) {
+        m_graph->set_host_only_arguments(*hostOnlyArguments);
+    }
     m_graph->update_network_name(network_name);
     if (m_batch_size.has_value() && m_batch_size.value() > 0) {
         // Initial batch setup for static cases

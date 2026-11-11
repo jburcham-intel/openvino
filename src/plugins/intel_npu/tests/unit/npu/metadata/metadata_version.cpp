@@ -594,3 +594,32 @@ TEST_F(MetadataUnitTests, layoutLengthExceedsBlobLimit) {
     source = BlobSource(tensor);
     OV_EXPECT_THROW(read_metadata_from(source), ov::Exception, _);
 }
+
+TEST_F(MetadataUnitTests, HostOnlyArgumentDeclarationsSurviveCacheRoundTrip) {
+    std::stringstream stream;
+    const std::vector<uint32_t> indices{2, 7, 9};
+    Metadata<METADATA_VERSION_2_8>(0,
+                                   CURRENT_OPENVINO_VERSION,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   BlobType::ELF,
+                                   indices)
+        .write(stream);
+    BlobSource source(stream);
+    const auto restored = read_metadata_from(source);
+    ASSERT_TRUE(restored->get_host_only_arguments().has_value());
+    EXPECT_EQ(*restored->get_host_only_arguments(), indices);
+}
+
+TEST_F(MetadataUnitTests, OlderMetadataHasNoHostOnlyArgumentDeclarations) {
+    std::stringstream stream;
+    Metadata<METADATA_VERSION_2_7>(0, CURRENT_OPENVINO_VERSION).write(stream);
+    BlobSource source(stream);
+    const auto restored = read_metadata_from(source);
+    EXPECT_FALSE(restored->get_host_only_arguments().has_value());
+}
