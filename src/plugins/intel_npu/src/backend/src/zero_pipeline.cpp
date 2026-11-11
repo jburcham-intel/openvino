@@ -52,6 +52,14 @@ size_t device_access_size(const ZeroInitStructsHolder& init_structs, const ov::I
     }
     return span;
 }
+
+bool host_only_argument(const IGraph& graph, uint32_t index) {
+    const auto& inputs = graph.get_metadata().inputs;
+    const auto desc = std::find_if(inputs.begin(), inputs.end(), [index](const IODescriptor& d) {
+        return d.indexUsedByDriver == index;
+    });
+    return desc != inputs.end() && desc->isHostOnly;
+}
 }  // namespace
 
 std::vector<size_t> IPipeline::get_strides(const std::vector<size_t>& strides_in_bytes,
@@ -241,12 +249,12 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
                     tensor->get_strides().empty()) {
                     _graph->set_argument_value(desc.indexUsedByDriver,
                                                tensor->data(),
-                                               device_access_size(*_init_structs, *tensor));
+                                               desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor));
                 } else {
                     _graph->set_argument_value_with_strides(
                         desc.indexUsedByDriver,
                         tensor->data(),
-                        device_access_size(*_init_structs, *tensor),
+                        desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor),
                         get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
                 }
                 ++io_index;
@@ -258,12 +266,12 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
                 _graph->set_argument_value(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size,
-                    device_access_size(*_init_structs, *tensor, _batch_size));
+                    desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor, _batch_size));
             } else {
                 _graph->set_argument_value_with_strides(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
-                    device_access_size(*_init_structs, *tensor, _batch_size),
+                    desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor, _batch_size),
                     get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
             }
 
@@ -277,12 +285,12 @@ Pipeline::Pipeline(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
                 _graph->set_argument_value(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_byte_size()) / _batch_size,
-                    device_access_size(*_init_structs, *tensor, _batch_size));
+                    desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor, _batch_size));
             } else {
                 _graph->set_argument_value_with_strides(
                     desc.indexUsedByDriver,
                     static_cast<unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
-                    device_access_size(*_init_structs, *tensor, _batch_size),
+                    desc.isHostOnly ? 0 : device_access_size(*_init_structs, *tensor, _batch_size),
                     get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
             }
             ++io_index;
@@ -426,12 +434,16 @@ void Pipeline::update_graph_arguments(uint32_t index,
                 index,
                 static_cast<const unsigned char*>(tensor->data()) +
                     (i * tensor->get_byte_size()) / number_of_command_lists,
-                device_access_size(*_init_structs, *tensor, number_of_command_lists));
+                host_only_argument(*_graph, index)
+                    ? 0
+                    : device_access_size(*_init_structs, *tensor, number_of_command_lists));
         } else {
             _command_lists.at(i)->updateMutableCommandListWithStrides(
                 index,
                 static_cast<const unsigned char*>(tensor->data()) + (i * tensor->get_strides()[0]),
-                device_access_size(*_init_structs, *tensor, number_of_command_lists),
+                host_only_argument(*_graph, index)
+                    ? 0
+                    : device_access_size(*_init_structs, *tensor, number_of_command_lists),
                 get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
         }
     }
@@ -452,13 +464,16 @@ void Pipeline::update_graph_arguments(uint32_t index,
 
     if (tensor->get_element_type().bitwidth() < 8 || tensor->is_continuous() || tensor->get_strides().empty()) {
         _command_lists.at(batch_index)
-            ->updateMutableCommandList(index, tensor->data(), device_access_size(*_init_structs, *tensor));
+            ->updateMutableCommandList(
+                index,
+                tensor->data(),
+                host_only_argument(*_graph, index) ? 0 : device_access_size(*_init_structs, *tensor));
     } else {
         _command_lists.at(batch_index)
             ->updateMutableCommandListWithStrides(
                 index,
                 tensor->data(),
-                device_access_size(*_init_structs, *tensor),
+                host_only_argument(*_graph, index) ? 0 : device_access_size(*_init_structs, *tensor),
                 get_strides(tensor->get_strides(), tensor->get_element_type().size(), true));
     }
 };

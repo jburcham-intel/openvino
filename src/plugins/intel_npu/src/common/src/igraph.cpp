@@ -16,6 +16,10 @@ std::vector<ov::ProfilingInfo> IGraph::process_profiling_output(const std::vecto
     OPENVINO_THROW("process_profiling_output not implemented");
 }
 
+void IGraph::set_host_only_arguments(const std::vector<uint32_t>&) {
+    OPENVINO_THROW("set_host_only_arguments not implemented");
+}
+
 void IGraph::set_argument_value(uint32_t, const void*, size_t) const {
     OPENVINO_THROW("set_argument_value not implemented");
 }
