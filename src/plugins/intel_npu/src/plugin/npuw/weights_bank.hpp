@@ -9,12 +9,14 @@
 #include <tuple>
 #include <unordered_map>
 
+#include "intel_npu/utils/zero/zero_mapped_weights.hpp"
 #include "lazy_tensor.hpp"
 #include "openvino/op/constant.hpp"
 #include "openvino/runtime/iplugin.hpp"
 #include "openvino/runtime/iremote_context.hpp"
 #include "openvino/runtime/make_tensor.hpp"
 #include "openvino/runtime/tensor.hpp"
+#include "openvino/util/mmap_object.hpp"
 #include "orc.hpp"
 #include "orc/schema_npuw.hpp"
 
@@ -57,10 +59,17 @@ private:
         LazyTensor lt;
         ov::Tensor tensor;
     };
+    // Device mapping of a whole weights file; cpu_mapping is declared first so it outlives the device mapping
+    // imported from it
+    struct FileZeroCopyMapping {
+        std::shared_ptr<ov::MappedMemory> cpu_mapping;
+        std::shared_ptr<::intel_npu::ZeroMappedWeights> device_mapping;
+    };
     // Bank for specified device and their allocated memory
     struct DeviceBank {
         std::unordered_map<int64_t, StoredTensor> storage;
         std::unordered_map<LazyTensor, int64_t, LazyTensor::Hash> registered_tensors;
+        std::unordered_map<std::string, std::shared_ptr<FileZeroCopyMapping>> zero_copy_mappings;
     };
     std::unordered_map<std::string, DeviceBank> m_device_banks;
 

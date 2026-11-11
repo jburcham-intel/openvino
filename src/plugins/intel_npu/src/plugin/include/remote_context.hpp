@@ -56,6 +56,13 @@ public:
      */
     ov::SoPtr<ov::ITensor> create_host_tensor(const ov::element::Type type, const ov::Shape& shape) override;
 
+    /**
+     * @brief Returns the Level Zero structures backing this remote context.
+     */
+    const std::shared_ptr<ZeroInitStructsHolder>& get_init_structs() const {
+        return _init_structs;
+    }
+
 private:
     std::shared_ptr<ov::IRemoteContext> get_this_shared_ptr();
 

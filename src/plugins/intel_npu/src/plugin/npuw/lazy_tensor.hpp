@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <variant>
 
 #include "openvino/op/constant.hpp"
@@ -76,6 +77,14 @@ public:
     };
     Meta eval_meta() const;
 
+    // Byte range of a weights file this tensor's data is read from verbatim; only set for a bare file-backed Const
+    struct FileBackedInfo {
+        std::string weights_path;
+        std::size_t offset;
+        std::size_t byte_size;
+    };
+    std::optional<FileBackedInfo> get_file_backed_info() const;
+
     void read_weight(const ov::npuw::s11n::WeightsContext& ctx);
     operator bool() const;
 
@@ -101,6 +110,7 @@ public:
     bool operator==(const Const& other) const;
     ov::Tensor eval() const;
     LazyTensor::Meta eval_meta() const;
+    std::optional<LazyTensor::FileBackedInfo> get_file_backed_info() const;
     void read_weight(const ov::npuw::s11n::WeightsContext& ctx);
     void detach();
     void serialize(ov::npuw::orc::Stream& stream);

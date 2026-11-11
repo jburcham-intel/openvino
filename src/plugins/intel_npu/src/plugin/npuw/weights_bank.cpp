@@ -6,6 +6,8 @@
 
 #include "logging.hpp"
 #include "openvino/core/parallel.hpp"
+#include "openvino/util/file_util.hpp"
+#include "remote_context.hpp"
 #include "serialization.hpp"
 #include "util.hpp"
 
@@ -86,6 +88,7 @@ struct TensorToAllocate {
     LazyTensor::Meta meta;
     ov::Tensor allocated_tensor;
     int64_t uid;
+    bool zero_copy = false;  // allocated_tensor views the mapped weights file; nothing to evaluate or copy
 };
 
 void Bank::evaluate_and_allocate() {
@@ -160,7 +163,50 @@ void Bank::evaluate_and_allocate_on_device(Bank::DeviceBank& device_bank,
 
     // Allocate memory sequentially - in order of UID
     auto remote_ctx = m_core->get_default_context(device)._ptr;
+
+    // Plain file-backed weights are viewed in place in a device mapping of their weights file instead of being
+    // allocated and copied, unless NPUW_WEIGHTS_ZERO_COPY=0 or the driver can't tag them as weights or take argument
+    // sizes; without sizes the driver can't tell which parts of the mapping a weight spans
+    auto npu_remote_ctx = std::dynamic_pointer_cast<::intel_npu::RemoteContextImpl>(remote_ctx);
+    auto init_structs = npu_remote_ctx ? npu_remote_ctx->get_init_structs() : nullptr;
+    const bool zero_copy = init_structs && init_structs->isMemUsageHintSupported() &&
+                           init_structs->isGraphArgumentSizeSupported() && ::intel_npu::ZeroMappedWeights::is_enabled();
+    auto get_mapping = [&](const std::string& weights_path) {
+        auto [iter, inserted] = device_bank.zero_copy_mappings.try_emplace(weights_path);
+        if (inserted) {
+            // a failure stays cached as nullptr, so each file is only tried once
+            try {
+                auto mapping = std::make_shared<FileZeroCopyMapping>();
+                mapping->cpu_mapping = ov::load_mmap_object(ov::util::make_path(weights_path));
+                mapping->device_mapping =
+                    std::make_shared<::intel_npu::ZeroMappedWeights>(init_structs,
+                                                                     mapping->cpu_mapping->data(),
+                                                                     mapping->cpu_mapping->size());
+                iter->second = std::move(mapping);
+            } catch (const std::exception& ex) {
+                LOG_WARN("Weights file \"" << weights_path << "\" falls back to allocate+copy: " << ex.what());
+            }
+        }
+        return iter->second;
+    };
+
     for (auto&& allocated : uids_to_allocated) {
+        if (zero_copy) {
+            const auto file_info = device_bank.storage.at(allocated.uid).lt.get_file_backed_info();
+            if (file_info) {
+                const auto mapping = get_mapping(file_info->weights_path);
+                if (mapping && mapping->device_mapping->covers(file_info->offset, file_info->byte_size)) {
+                    // the view keeps the mapping alive for as long as the tensor exists
+                    auto view = ov::make_tensor(allocated.meta.type,
+                                                allocated.meta.shape,
+                                                mapping->cpu_mapping->data() + file_info->offset);
+                    allocated.allocated_tensor = ov::make_tensor(ov::SoPtr<ov::ITensor>(view, mapping));
+                    allocated.zero_copy = true;
+                    continue;
+                }
+            }
+        }
+
         ov::SoPtr<ov::ITensor> remote_tensor =
             remote_ctx->create_host_tensor(allocated.meta.type, allocated.meta.shape);
         allocated = {allocated.meta, ov::make_tensor(remote_tensor), allocated.uid};
@@ -171,8 +217,10 @@ void Bank::evaluate_and_allocate_on_device(Bank::DeviceBank& device_bank,
         auto& allocated = uids_to_allocated[idx];
         auto& stored_tensor = device_bank.storage.at(allocated.uid);
 
-        auto transformed = stored_tensor.lt.eval();
-        transformed.copy_to(allocated.allocated_tensor);
+        if (!allocated.zero_copy) {
+            auto transformed = stored_tensor.lt.eval();
+            transformed.copy_to(allocated.allocated_tensor);
+        }
         stored_tensor.tensor = std::move(allocated.allocated_tensor);
 
         // Detach the evaluated LazyTensor from its memory here - when it is 100%
