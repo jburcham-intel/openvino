@@ -72,6 +72,10 @@ public:
     virtual ~IBlobFormatImporter() = default;
 
 protected:
+    virtual std::optional<std::vector<uint32_t>> extract_host_only_arguments() const {
+        return std::nullopt;
+    }
+
     Config m_config;
     Logger m_logger;
 

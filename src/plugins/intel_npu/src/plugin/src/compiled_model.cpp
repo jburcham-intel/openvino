@@ -145,6 +145,13 @@ void CompiledModel::export_model(std::ostream& stream) const {
         compilerVersion = localConfig.get<COMPILER_VERSION>();
     }
 
+    std::vector<uint32_t> hostOnlyArguments;
+    for (const auto& input : _graph->get_metadata().inputs) {
+        if (input.isHostOnly) {
+            hostOnlyArguments.push_back(input.indexUsedByDriver);
+        }
+    }
+
     Metadata<CURRENT_METADATA_VERSION>(blobSizesBeforeVersioning,
                                        CURRENT_OPENVINO_VERSION,
                                        initBlobSizes,
@@ -154,7 +161,8 @@ void CompiledModel::export_model(std::ostream& stream) const {
                                        compilerVersion,
                                        blobSizeAfterEncryption,
                                        _graph->get_compatibility_descriptor(),
-                                       _graph->get_blob_type())
+                                       _graph->get_blob_type(),
+                                       hostOnlyArguments)
         .write(stream);
 }
 
