@@ -4,6 +4,8 @@
 
 #include "intel_npu/utils/zero/zero_mem.hpp"
 
+#include <ze_mem_npu_ext.h>
+
 #include "intel_npu/utils/utils.hpp"
 #include "intel_npu/utils/zero/zero_api.hpp"
 #include "intel_npu/utils/zero/zero_utils.hpp"
@@ -34,7 +36,8 @@ ZeroMem::ZeroMem(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
                  const void* data,
                  const size_t bytes,
                  const bool is_input,
-                 const bool standard_allocation)
+                 const bool standard_allocation,
+                 const bool weights)
     : _init_structs(init_structs),
       _logger("ZeHostMem", Logger::global().level()),
       _size(bytes) {
@@ -62,8 +65,13 @@ ZeroMem::ZeroMem(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
         if (is_input) {
             zero_memory_flag = ZE_HOST_MEM_ALLOC_FLAG_BIAS_WRITE_COMBINED;
         }
+        // the weights hint is chained after the import, where drivers that predate it never look
+        ze_mem_usage_hint_npu_ext_desc_t usage_hint = {ZE_STRUCTURE_TYPE_MEM_USAGE_HINT_NPU_EXT,
+                                                       nullptr,
+                                                       ZE_NPU_MEM_USAGE_WEIGHTS};
+        const bool tag_weights = weights && _init_structs->isMemUsageHintSupported();
         ze_external_memmap_sysmem_ext_desc_t memory_import = {ZE_STRUCTURE_TYPE_EXTERNAL_MEMMAP_SYSMEM_EXT_DESC,
-                                                              nullptr,
+                                                              tag_weights ? &usage_hint : nullptr,
                                                               const_cast<void*>(data),
                                                               _size};
         ze_host_mem_alloc_desc_t desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, &memory_import, zero_memory_flag};

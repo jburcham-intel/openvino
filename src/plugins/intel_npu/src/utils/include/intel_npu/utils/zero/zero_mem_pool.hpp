@@ -87,5 +87,16 @@ std::shared_ptr<ZeroMem> import_standard_allocation_memory(const std::shared_ptr
                                                            const size_t bytes,
                                                            const bool is_input = false);
 
+/**
+ * @brief Same as import_standard_allocation_memory, but a new import is tagged as graph weights (ZE_extension_mem_npu),
+ * so the driver can page it in and out in parts. A live pool entry that already covers the range is returned as is.
+ * @param init_structs Holder for the level zero structures.
+ * @param data User memory holding the weights, e.g. a memory mapped weights file.
+ * @param bytes Size in bytes of the memory.
+ */
+std::shared_ptr<ZeroMem> import_weights_memory(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
+                                               const void* data,
+                                               const size_t bytes);
+
 }  // namespace zero_mem
 }  // namespace intel_npu

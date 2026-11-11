@@ -8,6 +8,7 @@
 #include <ze_context_npu_ext.h>
 #include <ze_driver_npu_ext.h>
 #include <ze_graph_ext.h>
+#include <ze_mem_npu_ext.h>
 
 #include <regex>
 
@@ -28,6 +29,7 @@ constexpr uint32_t TARGET_ZE_CONTEXT_NPU_EXT_VERSION = ZE_CONTEXT_NPU_EXT_VERSIO
 constexpr uint32_t TARGET_ZE_MUTABLE_COMMAND_LIST_EXT_VERSION = ZE_MUTABLE_COMMAND_LIST_EXP_VERSION_1_1;
 constexpr uint32_t TARGET_ZE_EXTERNAL_MEMMAP_SYSMEM_EXT_VERSION = ZE_EXTERNAL_MEMMAP_SYSMEM_EXT_VERSION_1_0;
 constexpr uint32_t TARGET_ZE_COMMAND_QUEUE_SET_PRIORITY_EXT_VERSION = ZE_COMMAND_QUEUE_SET_PRIORITY_EXT_VERSION_1_0;
+constexpr uint32_t TARGET_ZE_MEM_NPU_EXT_VERSION = ZE_MEM_NPU_EXT_VERSION_1_0;
 
 constexpr ze_driver_uuid_t uuid = ze_intel_npu_driver_uuid;
 
@@ -430,6 +432,16 @@ ZeroInitStructsHolder::ZeroInitStructsHolder()
     if (command_queue_set_priority_ext_version > 0) {
         _command_queue_set_priority_supported = true;
     }
+
+    uint32_t mem_npu_ext_version = 0;
+    std::tie(mem_npu_ext_version, std::ignore) =
+        queryDriverExtensionVersion(ZE_MEM_NPU_EXT_NAME, TARGET_ZE_MEM_NPU_EXT_VERSION, extProps, count);
+
+    _log.debug("NPU memory extension version %d.%d",
+               ZE_MAJOR_VERSION(mem_npu_ext_version),
+               ZE_MINOR_VERSION(mem_npu_ext_version));
+
+    _mem_usage_hint_supported = mem_npu_ext_version > 0;
 
     _command_queue_group_ordinal =
         zeroUtils::findCommandQueueGroupOrdinal(_device_handle, ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE);

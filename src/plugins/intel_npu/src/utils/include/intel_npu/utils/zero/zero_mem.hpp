@@ -54,12 +54,15 @@ private:
      * the buffer is intended to be used as an input.
      * @param standard_allocation If a CPU standard allocation is shared it must be set to true. Otherwise it will try
      * to import DMA-BUF (on Linux) or WIN32 (on Windows) memory.
+     * @param weights Tag a standard allocation as graph weights (ZE_extension_mem_npu), so the driver can page it in
+     * and out in parts. Ignored when the driver doesn't support the hint.
      */
     ZeroMem(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
             const void* data,
             const size_t bytes,
             const bool is_input,
-            const bool standard_allocation);
+            const bool standard_allocation,
+            const bool weights = false);
 
     /**
      * @brief Return memory id of the allocated memory

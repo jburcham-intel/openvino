@@ -62,7 +62,8 @@ public:
         const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
         const void* data,
         const size_t bytes,
-        const bool is_input) {
+        const bool is_input,
+        const bool weights) {
         bool out_of_bounds = false;
         {
             std::lock_guard<std::mutex> lock(init_structs->getZeroMemPool().mem_pool_mutex);
@@ -71,7 +72,7 @@ public:
             auto memory_id = zeroUtils::get_l0_context_memory_allocation_id(init_structs->getContext(), data);
             if (memory_id == 0) {
                 // try to import memory if it isn't part of the same zero context
-                return import_standard_allocation(init_structs, data, bytes, is_input);
+                return import_standard_allocation(init_structs, data, bytes, is_input, weights);
             }
 
             auto& zero_mem_pool = init_structs->getZeroMemPool().mem_pool;
@@ -101,7 +102,7 @@ public:
                     notify_zero_mem_pool.erase(memory_id);
 
                     // import again memory after make sure it is destroyed
-                    return ZeroMemPoolManager::import_standard_allocation(init_structs, data, bytes, is_input);
+                    return ZeroMemPoolManager::import_standard_allocation(init_structs, data, bytes, is_input, weights);
                 }
             }
         }
@@ -117,9 +118,10 @@ private:
         const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
         const void* data,
         const size_t bytes,
-        const bool is_input) {
+        const bool is_input,
+        const bool weights) {
         auto zero_memory = std::shared_ptr<ZeroMem>(
-            new ZeroMem(init_structs, data, bytes, is_input, true),
+            new ZeroMem(init_structs, data, bytes, is_input, true, weights),
             [init_structs](ZeroMem* ptr) {
                 auto memory_id = ptr->id();
                 auto& notify_zero_mem_pool = init_structs->getZeroMemPool().notify_mem_pool;
@@ -182,7 +184,13 @@ std::shared_ptr<ZeroMem> import_standard_allocation_memory(const std::shared_ptr
                                                            const void* data,
                                                            const size_t bytes,
                                                            const bool is_input) {
-    return ZeroMemPoolManager::import_standard_allocation_memory(init_structs, data, bytes, is_input);
+    return ZeroMemPoolManager::import_standard_allocation_memory(init_structs, data, bytes, is_input, false);
+}
+
+std::shared_ptr<ZeroMem> import_weights_memory(const std::shared_ptr<ZeroInitStructsHolder>& init_structs,
+                                               const void* data,
+                                               const size_t bytes) {
+    return ZeroMemPoolManager::import_standard_allocation_memory(init_structs, data, bytes, false, true);
 }
 
 }  // namespace zero_mem

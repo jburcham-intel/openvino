@@ -86,6 +86,11 @@ public:
     inline bool isGraphArgumentSizeSupported() const {
         return getGraphDdiTable().version() >= ZE_MAKE_VERSION(1, 21);
     }
+
+    // whether allocations can carry ze_mem_usage_hint_npu_ext_desc_t (ZE_extension_mem_npu)
+    inline bool isMemUsageHintSupported() const {
+        return _mem_usage_hint_supported;
+    }
     inline uint32_t getCommandQueueGroupOrdinal() const {
         return _command_queue_group_ordinal;
     }
@@ -139,6 +144,7 @@ private:
     bool _external_memory_standard_allocation_supported = false;
     bool _external_memory_fd_win32_supported = false;
     bool _command_queue_set_priority_supported = false;
+    bool _mem_usage_hint_supported = false;
 
     uint32_t _context_options = 0;
 
