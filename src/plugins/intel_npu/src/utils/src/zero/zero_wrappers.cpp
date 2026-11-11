@@ -230,8 +230,9 @@ CommandList::~CommandList() {
         _log.error("zeCommandListDestroy failed %#X", uint64_t(result));
     }
 }
-void CommandList::updateMutableCommandList(uint32_t index, const void* data) const {
+void CommandList::updateMutableCommandList(uint32_t index, const void* data, size_t size) const {
     ze_mutable_graph_argument_exp_desc_t desc = {};
+    ze_graph_argument_size_desc_t size_desc = {};
 
     desc.stype = (_init_structs->getZeDrvApiVersion() >= ZE_MAKE_VERSION(1, 11))
                      ? ZE_STRUCTURE_TYPE_MUTABLE_GRAPH_ARGUMENT_EXP_DESC
@@ -239,6 +240,14 @@ void CommandList::updateMutableCommandList(uint32_t index, const void* data) con
     desc.commandId = _command_id;
     desc.argIndex = index;
     desc.pArgValue = data;
+
+    // the size tells the driver which bytes the device accesses; drivers before graph extension 1.21 don't take it
+    const bool chain_size = _init_structs->isGraphArgumentSizeSupported();
+    if (chain_size) {
+        size_desc.stype = ZE_STRUCTURE_TYPE_GRAPH_ARGUMENT_SIZE;
+        size_desc.size = size;
+        desc.pNext = &size_desc;
+    }
 
     ze_mutable_commands_exp_desc_t mutable_commands_exp_desc_t = {ZE_STRUCTURE_TYPE_MUTABLE_COMMANDS_EXP_DESC,
                                                                   &desc,
@@ -249,8 +258,10 @@ void CommandList::updateMutableCommandList(uint32_t index, const void* data) con
 }
 void CommandList::updateMutableCommandListWithStrides(uint32_t index,
                                                       const void* data,
+                                                      size_t size,
                                                       const std::vector<size_t>& strides) const {
     ze_mutable_graph_argument_exp_desc_t desc = {};
+    ze_graph_argument_size_desc_t size_desc = {};
 
     desc.stype = (_init_structs->getZeDrvApiVersion() >= ZE_MAKE_VERSION(1, 11))
                      ? ZE_STRUCTURE_TYPE_MUTABLE_GRAPH_ARGUMENT_EXP_DESC
@@ -258,6 +269,14 @@ void CommandList::updateMutableCommandListWithStrides(uint32_t index,
     desc.commandId = _command_id;
     desc.argIndex = index;
     desc.pArgValue = data;
+
+    // the size tells the driver which bytes the device accesses; drivers before graph extension 1.21 don't take it
+    const bool chain_size = _init_structs->isGraphArgumentSizeSupported();
+    if (chain_size) {
+        size_desc.stype = ZE_STRUCTURE_TYPE_GRAPH_ARGUMENT_SIZE;
+        size_desc.size = size;
+        desc.pNext = &size_desc;
+    }
 
     ze_graph_argument_value_strides_t strides_value = {};
     if (!strides.empty()) {
@@ -279,7 +298,11 @@ void CommandList::updateMutableCommandListWithStrides(uint32_t index,
             strides_value.userStrides[i] = static_cast<uint32_t>(strides[i]);
         }
 
-        desc.pNext = &strides_value;
+        if (chain_size) {
+            size_desc.pNext = &strides_value;
+        } else {
+            desc.pNext = &strides_value;
+        }
     }
 
     ze_mutable_commands_exp_desc_t mutable_commands_exp_desc_t = {ZE_STRUCTURE_TYPE_MUTABLE_COMMANDS_EXP_DESC,

@@ -277,7 +277,14 @@ void ZeGraphExtWrappers::getGraphBinary(const GraphDescriptor& graphDescriptor,
 
 void ZeGraphExtWrappers::setGraphArgumentValue(const GraphDescriptor& graphDescriptor,
                                                uint32_t id,
-                                               const void* data) const {
+                                               const void* data,
+                                               size_t size) const {
+    if (_zeroInitStruct->isGraphArgumentSizeSupported()) {
+        setGraphArgumentValueWithStrides(graphDescriptor, id, data, size, {});
+        return;
+    }
+
+    // drivers before graph extension 1.21 take no argument size
     _logger.debug("setGraphArgumentValue - perform pfnSetArgumentValue");
     auto result = _zeroInitStruct->getGraphDdiTable().pfnSetArgumentValue(graphDescriptor._handle, id, data);
     THROW_ON_FAIL_FOR_LEVELZERO_EXT("pfnSetArgumentValue", result, _zeroInitStruct->getGraphDdiTable());
@@ -286,13 +293,22 @@ void ZeGraphExtWrappers::setGraphArgumentValue(const GraphDescriptor& graphDescr
 void ZeGraphExtWrappers::setGraphArgumentValueWithStrides(const GraphDescriptor& graphDescriptor,
                                                           uint32_t id,
                                                           const void* data,
+                                                          size_t size,
                                                           const std::vector<size_t>& strides) const {
     OPENVINO_ASSERT(_graphExtVersion >= ZE_MAKE_VERSION(1, 15),
                     "Strides are not supported by the current driver version.");
+    // the size tells the driver which bytes the device accesses; drivers before graph extension 1.21 don't take it
+    const bool chainSize = _zeroInitStruct->isGraphArgumentSizeSupported();
     ze_graph_argument_value_tensor_t tensorValue = {};
+    ze_graph_argument_size_desc_t sizeValue = {};
     ze_graph_argument_value_strides_t stridesValue = {};
     tensorValue.stype = ZE_STRUCTURE_TYPE_GRAPH_ARGUMENT_TENSOR;
     tensorValue.pTensor = data;
+    if (chainSize) {
+        sizeValue.stype = ZE_STRUCTURE_TYPE_GRAPH_ARGUMENT_SIZE;
+        sizeValue.size = size;
+        tensorValue.pNext = &sizeValue;
+    }
 
     if (!strides.empty()) {
         if (strides.size() > ZE_MAX_GRAPH_ARGUMENT_DIMENSIONS_SIZE) {
@@ -310,7 +326,11 @@ void ZeGraphExtWrappers::setGraphArgumentValueWithStrides(const GraphDescriptor&
         }
 
         _logger.debug("setGraphArgumentValue - set strides");
-        tensorValue.pNext = &stridesValue;
+        if (chainSize) {
+            sizeValue.pNext = &stridesValue;
+        } else {
+            tensorValue.pNext = &stridesValue;
+        }
     }
 
     _logger.debug("setGraphArgumentValue - perform pfnSetArgumentValue2 for data");

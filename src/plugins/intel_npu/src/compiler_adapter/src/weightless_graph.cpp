@@ -618,18 +618,22 @@ void WeightlessGraph::create_pipeline(const size_t initIndex,
 
     size_t io_index = 0;
     for (const auto& desc : _initsMetadata.at(initIndex).inputs) {
-        const void* data = inputTensors.at(io_index++)->data();
+        const auto& tensor = inputTensors.at(io_index++);
+        const void* data = tensor->data();
         _zeGraphExt->setGraphArgumentValue(_initsGraphDesc.at(initIndex),
                                            desc.indexUsedByDriver,
-                                           static_cast<const unsigned char*>(data));
+                                           static_cast<const unsigned char*>(data),
+                                           tensor->get_byte_size());
     }
 
     io_index = 0;
     for (const auto& desc : _initsMetadata.at(initIndex).outputs) {
-        const void* data = outputTensors.at(io_index++)->data();
+        const auto& tensor = outputTensors.at(io_index++);
+        const void* data = tensor->data();
         _zeGraphExt->setGraphArgumentValue(_initsGraphDesc.at(initIndex),
                                            desc.indexUsedByDriver,
-                                           static_cast<const unsigned char*>(data));
+                                           static_cast<const unsigned char*>(data),
+                                           tensor->get_byte_size());
     }
 
     _initsCommandLists.at(initIndex)->appendGraphExecute(
@@ -662,7 +666,9 @@ void WeightlessGraph::set_weights_inputs() {
                         desc.nameFromCompiler,
                         "\" has no correspondent within the init outputs.");
         std::shared_ptr<ov::ITensor> weightsTensor = _mainInputsViewTensors.at(desc.nameFromCompiler);
-        set_argument_value(desc.indexUsedByDriver, static_cast<unsigned char*>(weightsTensor->data()));
+        set_argument_value(desc.indexUsedByDriver,
+                           static_cast<unsigned char*>(weightsTensor->data()),
+                           weightsTensor->get_byte_size());
     }
 }
 

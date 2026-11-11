@@ -51,9 +51,10 @@ public:
 
     virtual std::vector<ov::ProfilingInfo> process_profiling_output(const std::vector<uint8_t>& profData) const;
 
-    virtual void set_argument_value(uint32_t id, const void* data) const;
+    virtual void set_argument_value(uint32_t id, const void* data, size_t size) const;
     virtual void set_argument_value_with_strides(uint32_t id,
                                                  const void* data,
+                                                 size_t size,
                                                  const std::vector<size_t>& strides) const;
 
     void initialize(const Config& config);
