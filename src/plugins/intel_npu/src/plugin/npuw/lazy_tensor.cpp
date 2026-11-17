@@ -128,6 +128,14 @@ LazyTensor::Meta Const::eval_meta() const {
     return {m_read_from_bin.get_shape(), m_read_from_bin.get_element_type()};
 }
 
+std::optional<LazyTensor::FileBackedInfo> Const::get_file_backed_info() const {
+    // Only a const read from a weights file by path; handle_provider consts have no stable path to map
+    if (m_node || m_weights_path.empty() || m_handle_provider) {
+        return std::nullopt;
+    }
+    return LazyTensor::FileBackedInfo{m_weights_path, m_offset, m_byte_size};
+}
+
 void Const::read_weight(const ov::npuw::s11n::WeightsContext& ctx) {
     NPUW_ASSERT(!m_node &&
                 "LazyTensor can only read weight when it's being deserialized and not created from a Constant!");
@@ -475,6 +483,7 @@ struct LazyTensorImpl {
 
     ov::Tensor eval() const;
     LazyTensor::Meta eval_meta() const;
+    std::optional<LazyTensor::FileBackedInfo> get_file_backed_info() const;
     std::size_t get_hash() const;
     void get_transformations(std::vector<LazyTensor::Transform>& vec) const;
 
@@ -722,6 +731,11 @@ void LazyTensorImpl::read_weight(const ov::npuw::s11n::WeightsContext& ctx) {
                m_transform);
 }
 
+std::optional<LazyTensor::FileBackedInfo> LazyTensorImpl::get_file_backed_info() const {
+    const auto* constant = std::get_if<op::Const>(&m_transform);
+    return constant ? constant->get_file_backed_info() : std::nullopt;
+}
+
 std::size_t LazyTensorImpl::get_hash() const {
     return m_hash;
 }
@@ -833,6 +847,13 @@ LazyTensor::Meta LazyTensor::eval_meta() const {
         return {};
     }
     return m_impl->eval_meta();
+}
+
+std::optional<LazyTensor::FileBackedInfo> LazyTensor::get_file_backed_info() const {
+    if (!m_impl) {
+        return std::nullopt;
+    }
+    return m_impl->get_file_backed_info();
 }
 
 void LazyTensor::read_weight(const ov::npuw::s11n::WeightsContext& ctx) {

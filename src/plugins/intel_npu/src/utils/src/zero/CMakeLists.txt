@@ -10,6 +10,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_mem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_mem_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/zero_mapped_weights.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_remote_tensor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_result.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/zero_tensor.cpp
